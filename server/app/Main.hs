@@ -1,24 +1,25 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai as Wai
-
 import qualified Network.WebSockets as WebSockets
 import Network.Wai.Handler.WebSockets (websocketsOr)
-
 import Network.HTTP.Types.Status (status200)
-
 import Network.Wai.Application.Static
 
 import WaiAppStatic.Types
 import Data.Maybe
 
-
 import System.IO
-
 import Debug.Trace (trace)
+
+import Data.Text (Text)
+
+import Control.Monad (forever)
+import Control.Exception.Safe
 
 immediatePutStrLn :: String -> IO ()
 immediatePutStrLn text = do
@@ -28,8 +29,16 @@ immediatePutStrLn text = do
 websocketsServerApp :: WebSockets.ServerApp
 websocketsServerApp pendingConnection = do
   immediatePutStrLn "Websokets server responding!"
-  connection <- WebSockets.acceptRequest pendingConnection
   hFlush stdout
+  connection <- WebSockets.acceptRequest pendingConnection
+  result <- try $ forever $ do
+    message <- WebSockets.receiveData connection :: IO Text
+    immediatePutStrLn $ show message
+  case result of
+    Left (err::SomeException) -> immediatePutStrLn ("error: " ++ show err)
+    Right _ -> immediatePutStrLn "websocket connection closed successfully"
+    _       -> immediatePutStrLn "???"
+  
 
 normalServerApp :: Wai.Application
 normalServerApp _ respond = do
@@ -53,4 +62,5 @@ staticServer = staticApp $ settings { ssIndices = indices }
     indices = fromJust $ toPieces ["index.html"]
 
 main :: IO ()
-main = Warp.run 8080 router 
+main = Warp.run 8080 router
+

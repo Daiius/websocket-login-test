@@ -37,5 +37,7 @@ executable websocket-login-test
       , websockets
       , http-types
       , wai-app-static
+      , text
+      , safe-exceptions
     hs-source-dirs:   app
     default-language: Haskell2010
