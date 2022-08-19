@@ -52,6 +52,10 @@ export class ConnectionManager
 
   onClose = async(e: CloseEvent) => {
     console.log("Connection closed, code: " + e.code);
+    //if (e.code == 1006) {
+    //  console.log("Trying to use 1006 closed websocket...");
+    //  this.ws!.send("closed by 1006... really??");
+    //}
     this.close();
 
     try {

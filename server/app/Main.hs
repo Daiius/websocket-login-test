@@ -57,7 +57,6 @@ websocketsServerApp ref pendingConnection = do
         immediatePutStrLn $ "message loop for " ++ unpack idToDisconnect ++ " end."
       doNothing = return ()
         
-
 normalServerApp :: Wai.Application
 normalServerApp _ respond = do
   immediatePutStrLn "Normal server responding!"
@@ -75,17 +74,14 @@ router ref req
 mainApp :: IORef ClientList -> Wai.Application
 mainApp ref = websocketsOr WebSockets.defaultConnectionOptions (websocketsServerApp ref) normalServerApp
 
-
 staticServer :: Wai.Application
 staticServer = staticApp $ settings { ssIndices = indices }
   where
     settings = defaultWebAppSettings "../client"
     indices = fromJust $ toPieces ["index.html"]
 
-
 main :: IO ()
 main = do
   ref <- newIORef []
   Warp.run 8080 (router ref)
-
 
