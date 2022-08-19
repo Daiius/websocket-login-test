@@ -13,47 +13,68 @@ import Network.Wai.Application.Static
 import WaiAppStatic.Types
 import Data.Maybe
 
-import System.IO
 import Debug.Trace (trace)
 
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 
 import Control.Monad (forever)
-import Control.Exception.Safe
+import Control.Exception.Safe (try, SomeException)
 
-immediatePutStrLn :: String -> IO ()
-immediatePutStrLn text = do
-  putStrLn text
-  hFlush stdout
+import Data.IORef (IORef, newIORef, readIORef, atomicModifyIORef)
 
-websocketsServerApp :: WebSockets.ServerApp
-websocketsServerApp pendingConnection = do
+import Utils (immediatePutStrLn, immediatePrint)
+import Connections
+import Messages (handleMessage)
+
+
+instance Show WebSockets.Connection where
+  show conn = "conn."
+
+
+websocketsServerApp :: IORef ClientList -> WebSockets.ServerApp
+websocketsServerApp ref pendingConnection = do
   immediatePutStrLn "Websokets server responding!"
-  hFlush stdout
+  identity <- newIORef ""
   connection <- WebSockets.acceptRequest pendingConnection
-  result <- try $ forever $ do
-    message <- WebSockets.receiveData connection :: IO Text
-    immediatePutStrLn $ show message
-  case result of
-    Left (err::SomeException) -> immediatePutStrLn ("error: " ++ show err)
-    Right _ -> immediatePutStrLn "websocket connection closed successfully"
-    _       -> immediatePutStrLn "???"
-  
+  WebSockets.withPingThread connection 30 doNothing $ do
+    result <- try $ forever $ do
+      immediatePutStrLn "Start message loop..."
+      message <- WebSockets.receiveData connection :: IO Text
+      immediatePutStrLn "Got message..."
+      immediatePutStrLn $ "\t" ++ unpack message
+      handleMessage ref identity connection message
+      immediatePutStrLn "Current status..."
+      clientList <- readIORef ref
+      immediatePrint clientList
+    case result of
+      Left (err::SomeException) -> immediatePutStrLn ("error: " ++ show err)
+      Right _ -> immediatePutStrLn "websocket connection closed successfully"
+    disconnectHelper identity
+    where
+      disconnectHelper identity = do
+        idToDisconnect <- readIORef identity
+        atomicModifyIORef ref (\l -> (removeClient l idToDisconnect, ()))
+        immediatePutStrLn $ "message loop for " ++ unpack idToDisconnect ++ " end."
+      doNothing = return ()
+        
 
 normalServerApp :: Wai.Application
 normalServerApp _ respond = do
   immediatePutStrLn "Normal server responding!"
   respond $ Wai.responseFile status200 [("Content-Type", "text/html")] "../client/index.html" Nothing
 
-router :: Wai.Application
-router req
-  | null path = mainApp req
+
+router :: IORef ClientList -> Wai.Application
+router ref req
+  | null path = mainApp ref req
   | otherwise = trace (show path) (staticServer req)
     where
       path = Wai.pathInfo req
 
-mainApp :: Wai.Application
-mainApp = websocketsOr WebSockets.defaultConnectionOptions websocketsServerApp normalServerApp
+
+mainApp :: IORef ClientList -> Wai.Application
+mainApp ref = websocketsOr WebSockets.defaultConnectionOptions (websocketsServerApp ref) normalServerApp
+
 
 staticServer :: Wai.Application
 staticServer = staticApp $ settings { ssIndices = indices }
@@ -61,6 +82,10 @@ staticServer = staticApp $ settings { ssIndices = indices }
     settings = defaultWebAppSettings "../client"
     indices = fromJust $ toPieces ["index.html"]
 
+
 main :: IO ()
-main = Warp.run 8080 router
+main = do
+  ref <- newIORef []
+  Warp.run 8080 (router ref)
+
 

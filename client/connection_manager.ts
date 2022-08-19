@@ -46,7 +46,7 @@ export class ConnectionManager
 
   onOpen = () => {
     console.log("open event");
-    this.ws!.send("Hello, " + this.name);
+    this.ws!.send("name," + this.name);
     this.nretry = 0;
   }
 
